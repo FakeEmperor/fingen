@@ -35,6 +35,7 @@ public class BackupJob extends DailyJob {
 
     public static int schedule() {
         // schedule between 1 and 6 AM
+        // TODO - add settings to change backup schedule
         return DailyJob.schedule(new JobRequest.Builder(TAG),
                 TimeUnit.HOURS.toMillis(1) + TimeUnit.MINUTES.toMillis(00),
                 TimeUnit.HOURS.toMillis(6) + TimeUnit.MINUTES.toMillis(00));
@@ -50,7 +51,7 @@ public class BackupJob extends DailyJob {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
             // Do the task here
             try {
-                File zip = DBHelper.getInstance(context).backupDB(true);
+                File zip = DBHelper.getInstance(context).backupDB(prefs.getString("backup_folder", ""), true);
                 if (token != null && zip != null) {
                     DbxClientV2 dbxClient = DropboxClient.getClient(token);
                     // Upload to Dropbox

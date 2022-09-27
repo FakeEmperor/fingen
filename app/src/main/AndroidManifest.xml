@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE"/>
@@ -80,7 +81,7 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
 
-        <receiver android:name=".receivers.SMSReceiver">
+        <receiver android:name=".receivers.SMSReceiver" android:exported="true">
             <intent-filter android:priority="2147483647">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED"/>
             </intent-filter>
@@ -94,7 +95,7 @@
                 <action android:name="com.yoshione.fingen.intent.action.CREATE_SMS"/>
             </intent-filter>
         </receiver>
-        <receiver android:name=".WidgetExpense">
+        <receiver android:name=".WidgetExpense" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
@@ -103,7 +104,7 @@
                 android:label="@string/ent_outcome"
                 android:resource="@xml/widget_info_outcome"/>
         </receiver>
-        <receiver android:name=".WidgetIncome">
+        <receiver android:name=".WidgetIncome" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
@@ -112,7 +113,7 @@
                 android:label="@string/ent_income"
                 android:resource="@xml/widget_info_income"/>
         </receiver>
-        <receiver android:name=".WidgetTransfer">
+        <receiver android:name=".WidgetTransfer" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
@@ -122,7 +123,7 @@
                 android:resource="@xml/widget_info_transfer"/>
         </receiver>
 
-        <receiver android:name=".receivers.CalcReciever">
+        <receiver android:name=".receivers.CalcReciever" android:exported="true">
             <intent-filter>
                 <action android:name="com.yoshione.fingen.intent.action.ACT_CALC_DONE"/>
             </intent-filter>
@@ -132,6 +133,7 @@
             android:name=".ActivityMain"
             android:label="@string/app_name"
             android:screenOrientation="portrait"
+            android:exported="true"
             android:theme="@style/splashScreenTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -157,10 +159,12 @@
             android:windowSoftInputMode="adjustResize|stateHidden"/>
         <activity
             android:name=".ActivityReferences"
+            android:exported="true"
             android:screenOrientation="portrait"/>
         <activity
             android:name=".ActivityModelList"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:exported="true">
             <intent-filter>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
@@ -236,13 +240,16 @@
         <activity
             android:name=".ActivityDebtsAndCredits"
             android:screenOrientation="portrait"
+            android:exported="true"
             android:theme="@style/AppThemeLight"/>
         <activity
             android:name=".calc.CalculatorActivity"
             android:screenOrientation="portrait"
+            android:exported="true"
             android:theme="@style/AppThemeLight"/>
         <activity
             android:name=".ActivityShortcut"
+            android:exported="true"
             android:theme="@style/Theme.Transparent">
             <intent-filter>
                 <action android:name="android.intent.action.CREATE_SHORTCUT"/>
@@ -251,14 +258,16 @@
         </activity>
         <activity
             android:name=".widgets.CustomPinActivity"
+            android:exported="true"
             android:screenOrientation="portrait"
             android:theme="@style/AppThemeLight"/>
         <activity
             android:name="com.dropbox.core.android.AuthActivity"
             android:configChanges="orientation|keyboard"
+            android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
-                <data android:scheme="${dropboxApiKey}"/>
+                <data android:scheme="db-7qtg3sog8gzgq1y"/>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <category android:name="android.intent.category.DEFAULT"/>

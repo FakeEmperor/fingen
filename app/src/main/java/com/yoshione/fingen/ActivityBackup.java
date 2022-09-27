@@ -1,12 +1,16 @@
 package com.yoshione.fingen;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.DocumentsContract;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -22,6 +26,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -42,6 +47,7 @@ import com.yoshione.fingen.dropbox.UserAccountTask;
 import com.yoshione.fingen.utils.DateTimeFormatter;
 import com.yoshione.fingen.utils.FabMenuController;
 import com.yoshione.fingen.utils.FileUtils;
+import com.yoshione.fingen.utils.RequestCodes;
 import com.yoshione.fingen.widgets.ToolbarActivity;
 
 import java.io.File;
@@ -241,10 +247,27 @@ public class ActivityBackup extends ToolbarActivity {
 
             @Override
             public void onError(Exception error) {
-                Log.d("User", "Error receiving account details.");
+                Log.e("User", "Error receiving account details.", error);
             }
         }).execute();
     }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode,
+                                 Intent resultData) {
+        super.onActivityResult(requestCode, resultCode, resultData);
+        if (requestCode == RequestCodes.REQUEST_CODE_SELECT_FOLDER && resultCode == Activity.RESULT_OK) {
+            // The result data contains a URI for the document or directory that
+            // the user selected.
+            Uri uri = null;
+            if (resultData != null) {
+                uri = resultData.getData();
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                prefs.edit().putString("dropbox-token", uri.getPath()).apply();
+            }
+        }
+    }
+
 
     private void initFabMenu() {
         mFabMenuController = new FabMenuController(fabMenuButtonRoot, fabBGLayout, this, mFabBackupLayout, mFabRestoreLayout, mFabRestoreFromDropboxLayout, mFabBackupToOriginDBLayout);
@@ -275,25 +298,44 @@ public class ActivityBackup extends ToolbarActivity {
         }
     }
 
-    @NeedsPermission({Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE})
-    void backupDB() {
+
+    /**
+     * Saves passed ZIP to DropBox, if it is configured.
+     * @param zip Saved backup file. If null, method won't do anything, instead showing user a toast with warning.
+     */
+    void saveZipToDB(@Nullable File zip) {
         SharedPreferences dropboxPrefs = getSharedPreferences("com.yoshione.fingen.dropbox", Context.MODE_PRIVATE);
         String token = dropboxPrefs.getString("dropbox-token", null);
-        try {
-            File zip = DBHelper.getInstance(getApplicationContext()).backupDB(true);
-            if (token != null && zip != null) {
-                new UploadTask(DropboxClient.getClient(token), zip, () -> {
-                    Toast.makeText(ActivityBackup.this, "File uploaded successfully", Toast.LENGTH_SHORT).show();
-                    SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(ActivityBackup.this);
-                    preferences.edit().putLong(FgConst.PREF_SHOW_LAST_SUCCESFUL_BACKUP_TO_DROPBOX, new Date().getTime()).apply();
-                    initLastDropboxBackupField();
-                }).execute();
-            } else {
-                Toast.makeText(ActivityBackup.this, "File saved successfully", Toast.LENGTH_SHORT).show();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (zip == null) {
+            Toast.makeText(ActivityBackup.this, "Nothing to back up (no entries?)", Toast.LENGTH_SHORT).show();
+            return;
         }
+        if (token == null) { return; }
+        new UploadTask(DropboxClient.getClient(token), zip, () -> {
+            Toast.makeText(ActivityBackup.this, "File uploaded successfully", Toast.LENGTH_SHORT).show();
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(ActivityBackup.this);
+            preferences.edit().putLong(FgConst.PREF_SHOW_LAST_SUCCESFUL_BACKUP_TO_DROPBOX, new Date().getTime()).apply();
+            initLastDropboxBackupField();
+        }).execute();
+    }
+
+    @NeedsPermission({Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE})
+    void backupDB() {
+        File zip = null;
+        boolean ok = true;
+        try {
+            String backupPath = prefs.getString("backup_folder", "");
+            if (backupPath.isEmpty()) {
+                requestFingenBackupFolder(null);
+                backupPath = prefs.getString("backup_folder", "");
+            }
+            zip = DBHelper.getInstance(getApplicationContext()).backupDB(backupPath, true);
+        } catch (IOException e) {
+            Toast.makeText(ActivityBackup.this, "Cannot save DB locally, check permissions.", Toast.LENGTH_SHORT).show();
+            ok = false;
+            Log.e(TAG, "Failed to save ZIP", e);
+        }
+        if (ok) { saveZipToDB(zip); }
     }
 
     @NeedsPermission({Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE})
@@ -325,24 +367,25 @@ public class ActivityBackup extends ToolbarActivity {
 
     @NeedsPermission({Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE})
     void backupToOriginDB() {
-        SharedPreferences dropboxPrefs = getSharedPreferences("com.yoshione.fingen.dropbox", Context.MODE_PRIVATE);
-        String token = dropboxPrefs.getString("dropbox-token", null);
+        File zip = null;
+        boolean ok = true;
         try {
-            File zip = DBHelper.getInstance(getApplicationContext()).backupToOriginDB(true);
-            if (token != null && zip != null) {
-                new UploadTask(DropboxClient.getClient(token), zip, () -> {
-                    Toast.makeText(ActivityBackup.this, "File uploaded successfully", Toast.LENGTH_SHORT).show();
-                    SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(ActivityBackup.this);
-                    preferences.edit().putLong(FgConst.PREF_SHOW_LAST_SUCCESFUL_BACKUP_TO_DROPBOX, new Date().getTime()).apply();
-                    initLastDropboxBackupField();
-                }).execute();
-            } else {
-                Toast.makeText(ActivityBackup.this, "File saved successfully", Toast.LENGTH_SHORT).show();
-            }
+            String backupPath = prefs.getString("backup_folder", "");
+            zip = DBHelper.getInstance(getApplicationContext()).backupToOriginDB(backupPath, true);
         } catch (IOException e) {
-            e.printStackTrace();
+            Toast.makeText(ActivityBackup.this, "Cannot save DB locally, check permissions.", Toast.LENGTH_SHORT).show();
+            ok = false;
+            Log.e(TAG, "Failed to save ZIP", e);
         }
+        if (ok) { saveZipToDB(zip); }
     }
+
+    public void requestFingenBackupFolder(@Nullable Uri initial) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        if (initial != null) { intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, initial); }
+        this.startActivityForResult(intent, RequestCodes.REQUEST_CODE_SELECT_FOLDER);
+    }
+
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -470,8 +513,13 @@ public class ActivityBackup extends ToolbarActivity {
         void showSelectBackupDialog() {
             AlertDialog.Builder builderSingle = new AlertDialog.Builder(activity);
             builderSingle.setTitle(activity.getResources().getString(R.string.ttl_select_db_file));
+            String folderUri = prefs.getString("backup_folder", "");
+            if (folderUri.isEmpty()) {
+                requestFingenBackupFolder(null);
+                folderUri = prefs.getString("backup_folder", "");
+            }
 
-            List<File> files = FileUtils.getListFiles(getApplicationContext(), new File(FileUtils.getExtFingenBackupFolder()), ".zip");
+            List<File> files = FileUtils.getListFiles(getApplicationContext(), new File(folderUri), ".zip");
             List<String> names = new ArrayList<>();
             String path;
             for (int i = files.size() - 1; i >= 0; i--) {
@@ -489,7 +537,7 @@ public class ActivityBackup extends ToolbarActivity {
             builderSingle.setAdapter(arrayAdapter, (dialog, which) -> {
                 ListView lw = ((AlertDialog) dialog).getListView();
                 String fileName = (String) lw.getAdapter().getItem(which);
-                DBHelper.getInstance(activity).showRestoreDialog(FileUtils.getExtFingenBackupFolder() + fileName, activity);
+                DBHelper.getInstance(activity).showRestoreDialog(prefs.getString("backup_folder", "") + fileName, activity);
             });
             builderSingle.show();
         }

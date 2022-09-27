@@ -2116,4 +2116,10 @@
     <!-- 28. EditorConstructor -->
     <!-- Actions -->
     <string name="act_tune_editor" formatted="false">Настроить редактор</string>
+    <string name="ent_close_account">Закрыть счет</string>
+    <string name="ent_open_account">Открыть счет</string>
+    <string name="msg_close_account_confirmation">Закрыть счет %s?</string>
+    <string name="msg_open_account_confirmation">Открыть счет %s?</string>
+    <string name="act_backup_to_origin">Сохранить в Dropbox</string>
+    <string name="pref_show_closed_debts">Показывать закрытые долги</string>
 </resources>

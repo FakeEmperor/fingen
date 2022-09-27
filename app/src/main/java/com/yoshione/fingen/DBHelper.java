@@ -111,6 +111,7 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
     //</editor-fold>
 
     private final Context mContext;
+    private final SharedPreferences prefs;
 
     public DBHelper(Context context, boolean isOriginDB) {
         super(context, isOriginDB ? DATABASE_ORIGIN_NAME : DATABASE_NAME, null, isOriginDB ? DATABASE_ORIGIN_VERSION : DATABASE_VERSION);
@@ -123,6 +124,7 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
         while (dbh.isUpgrading()) {
             SystemClock.sleep(10);
         }
+        prefs = PreferenceManager.getDefaultSharedPreferences(context);
     }
 
     private DBHelper(Context context) {
@@ -230,7 +232,7 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
 
         //Сделали на всякий случай бэкап
         try {
-            backupDB(false);
+            backupDB(prefs.getString("backup_folder", ""), false);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -457,31 +459,31 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
         return mContext.getDatabasePath(mOriginDB ? DATABASE_ORIGIN_NAME : DATABASE_NAME).toString();
     }
 
-    public File backupDB(boolean vacuum) throws IOException {
+    public File backupDB(String backupPath, boolean vacuum) throws IOException {
         File backup = null;
         if (vacuum) {
             mDatabase.execSQL("VACUUM");
         }
         if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            String backupPath = FileUtils.getExtFingenBackupFolder();
             @SuppressLint("SimpleDateFormat") String backupFile = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".zip";
 
-            if (!backupPath.isEmpty()) {
-                SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
-                String password = preferences.getString("backup_password", "");
-                boolean enableProtection = preferences.getBoolean("enable_backup_password", false);
-                if (enableProtection && !password.isEmpty()) {
-                    backup = FileUtils.zipAndEncrypt(getDbPath(), backupPath + backupFile, password, DATABASE_NAME);
-                } else {
-                    backup = FileUtils.zip(getDbPath(), backupPath + backupFile, DATABASE_NAME);
-                }
-                Log.d(TAG, String.format("File %s saved", backupFile));
+            if (backupPath.isEmpty()) {
+                throw new IOException("Cannot save backup - backup path is empty!");
             }
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+            String password = preferences.getString("backup_password", "");
+            boolean enableProtection = preferences.getBoolean("enable_backup_password", false);
+            if (enableProtection && !password.isEmpty()) {
+                backup = FileUtils.zipAndEncrypt(getDbPath(), backupPath + backupFile, password, DATABASE_NAME);
+            } else {
+                backup = FileUtils.zip(getDbPath(), backupPath + backupFile, DATABASE_NAME);
+            }
+            Log.d(TAG, String.format("File %s saved", backupFile));
         }
         return backup;
     }
 
-    public File backupToOriginDB(boolean vacuum) throws IOException {
+    public File backupToOriginDB(String backupPath, boolean vacuum) throws IOException {
         File backup = null;
         if (vacuum) {
             mDatabase.execSQL("VACUUM");
@@ -490,7 +492,7 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
             FileUtils.copyFile(getDbPath(), mContext.getDatabasePath(DATABASE_ORIGIN_NAME).getPath());
 
             DBHelper dbh = new DBHelper(mContext, true);
-            backup = dbh.backupDB(vacuum);
+            backup = dbh.backupDB(backupPath, vacuum);
             dbh.close();
             mContext.deleteDatabase(DATABASE_ORIGIN_NAME);
         }

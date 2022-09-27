@@ -1227,7 +1227,7 @@
 
     <!-- 16. Backup & Restore -->
     <!-- Actions -->
-    <string name="act_backup_to_origin" formatted="false">Сохранить БД для оригинала</string>
+    <string name="act_backup_to_origin" formatted="false">Сохранить в Dropbox</string>
 
     <!-- 16. Backup & Restore -->
     <!-- Titles -->

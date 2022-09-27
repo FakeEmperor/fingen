@@ -66,30 +66,6 @@ public class FileUtils {
         return success;
     }
 
-    private static String getExtFingenFolder() {
-        String path = Environment.getExternalStorageDirectory().toString() + "/" + FG_Ext_Storage_Folder + "/";
-
-        if (checkFolder(path)) {
-            return path;
-        } else {
-            return "";
-        }
-    }
-
-    public static String getExtFingenBackupFolder() {
-        String path = getExtFingenFolder();
-        if (!path.isEmpty()) {
-            path = path + FG_Backup_Folder + "/";
-            if (checkFolder(path)) {
-                return path;
-            } else {
-                return "";
-            }
-        } else {
-            return "";
-        }
-    }
-
     public static File zip(String file, String zipFile, String fileRenaming) throws IOException {
         BufferedInputStream origin;
         ZipOutputStream out = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(zipFile)));

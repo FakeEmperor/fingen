@@ -1207,15 +1207,15 @@
 
     <!-- 16. Backup & Restore -->
     <!-- Actions -->
-    <string name="act_backup" formatted="false">Backup DB</string>
+    <string name="act_backup" formatted="false">Backup to file</string>
 
     <!-- 16. Backup & Restore -->
     <!-- Actions -->
-    <string name="act_restore" formatted="false">Restore DB</string>
+    <string name="act_restore" formatted="false">Restore from file</string>
 
     <!-- 16. Backup & Restore -->
     <!-- Actions -->
-    <string name="act_restore_from_dropbox" formatted="false">Restore DB from Dropbox</string>
+    <string name="act_restore_from_dropbox" formatted="false">Restore from Dropbox</string>
 
     <!-- 16. Backup & Restore -->
     <!-- Actions -->
@@ -1223,7 +1223,7 @@
 
     <!-- 16. Backup & Restore -->
     <!-- Actions -->
-    <string name="act_backup_to_origin" formatted="false">Backup to origin DB</string>
+    <string name="act_backup_to_origin" formatted="false">Backup to Dropbox</string>
 
     <!-- 16. Backup & Restore -->
     <!-- Titles -->

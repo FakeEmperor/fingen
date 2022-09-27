@@ -38,7 +38,7 @@ public class UploadTask extends AsyncTask {
             dbxClient.files().uploadBuilder("/" + file.getName()) //Path in the user's Dropbox to save the file.
                     .withMode(WriteMode.OVERWRITE) //always overwrite existing file
                     .uploadAndFinish(inputStream);
-            Log.d("Upload Status", "Success");
+            Log.d("Dropbox - Upload Status", "Success");
         } catch (DbxException e) {
             e.printStackTrace();
         } catch (IOException e) {
