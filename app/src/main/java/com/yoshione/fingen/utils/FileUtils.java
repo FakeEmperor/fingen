@@ -27,6 +27,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -52,21 +54,15 @@ public class FileUtils {
         return Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED);
     }
 
-    private static boolean checkFolder(String pathToFolder) {
-        boolean success;
-
+    private static boolean checkFolder(String pathToFolder) throws IOException {
         if (isExtStorageEnabled()) {
-            File folder = new File(pathToFolder);
-
-            success = folder.exists() || folder.mkdir();
-        } else {
-            success = false;
+            Files.createDirectory(new File(pathToFolder).toPath());
+            return true;
         }
-
-        return success;
+        return true;
     }
 
-    private static String getExtFingenFolder() {
+    private static String getExtFingenFolder() throws IOException {
         String path = Environment.getExternalStorageDirectory().toString() + "/" + FG_Ext_Storage_Folder + "/";
 
         if (checkFolder(path)) {
@@ -76,7 +72,7 @@ public class FileUtils {
         }
     }
 
-    public static String getExtFingenBackupFolder() {
+    public static String getExtFingenBackupFolder() throws IOException {
         String path = getExtFingenFolder();
         if (!path.isEmpty()) {
             path = path + FG_Backup_Folder + "/";

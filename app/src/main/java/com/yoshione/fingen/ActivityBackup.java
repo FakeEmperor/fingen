@@ -171,9 +171,10 @@ public class ActivityBackup extends ToolbarActivity {
         getUserAccount();
         final SharedPreferences dropboxPrefs = getSharedPreferences("com.yoshione.fingen.dropbox", Context.MODE_PRIVATE);
         final String token = dropboxPrefs.getString("dropbox-token", null);
+        final String key = getString(R.string.DROPBOX_APP_KEY);
         mEditTextDropboxAccount.setOnClickListener(view -> {
             if (token == null) {
-                Auth.startOAuth2Authentication(ActivityBackup.this, getString(R.string.DROPBOX_APP_KEY));
+                Auth.startOAuth2Authentication(ActivityBackup.this, key);
             }
         });
         mButtonLogoutFromDropbox.setVisibility(token == null ? View.GONE : View.VISIBLE);
@@ -292,6 +293,7 @@ public class ActivityBackup extends ToolbarActivity {
                 Toast.makeText(ActivityBackup.this, "File saved successfully", Toast.LENGTH_SHORT).show();
             }
         } catch (IOException e) {
+            Toast.makeText(ActivityBackup.this, "Failed to save backup", Toast.LENGTH_SHORT).show();
             e.printStackTrace();
         }
     }
@@ -468,10 +470,17 @@ public class ActivityBackup extends ToolbarActivity {
         }
 
         void showSelectBackupDialog() {
+            String backupFolder;
+            try {
+                backupFolder = FileUtils.getExtFingenBackupFolder();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Toast.makeText(getApplicationContext(), "Failed to get backup folder path", Toast.LENGTH_SHORT).show();
+                return;
+            }
             AlertDialog.Builder builderSingle = new AlertDialog.Builder(activity);
             builderSingle.setTitle(activity.getResources().getString(R.string.ttl_select_db_file));
-
-            List<File> files = FileUtils.getListFiles(getApplicationContext(), new File(FileUtils.getExtFingenBackupFolder()), ".zip");
+            List<File> files = FileUtils.getListFiles(getApplicationContext(), new File(backupFolder), ".zip");
             List<String> names = new ArrayList<>();
             String path;
             for (int i = files.size() - 1; i >= 0; i--) {
@@ -486,10 +495,11 @@ public class ActivityBackup extends ToolbarActivity {
                     activity.getResources().getString(android.R.string.cancel),
                     (dialog, which) -> dialog.dismiss());
 
+            final String finalBackupFolder = backupFolder;
             builderSingle.setAdapter(arrayAdapter, (dialog, which) -> {
                 ListView lw = ((AlertDialog) dialog).getListView();
                 String fileName = (String) lw.getAdapter().getItem(which);
-                DBHelper.getInstance(activity).showRestoreDialog(FileUtils.getExtFingenBackupFolder() + fileName, activity);
+                DBHelper.getInstance(activity).showRestoreDialog(finalBackupFolder + fileName, activity);
             });
             builderSingle.show();
         }

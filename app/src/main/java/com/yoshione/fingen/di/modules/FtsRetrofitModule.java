@@ -11,10 +11,13 @@ import com.yoshione.fingen.fts.FtsHelper;
 import com.yoshione.fingen.fts.models.login.ReAuthLoginRequest;
 import com.yoshione.fingen.fts.models.login.ReAuthLoginResponse;
 
+import java.util.Arrays;
+
 import javax.inject.Singleton;
 
 import dagger.Module;
 import dagger.Provides;
+import okhttp3.ConnectionSpec;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -64,6 +67,7 @@ public class FtsRetrofitModule {
 	@Singleton
 	OkHttpClient provideOkHttpClient(HttpLoggingInterceptor httpLoggingInterceptor, SharedPreferences preferences) {
 		return new OkHttpClient.Builder()
+				.connectionSpecs(Arrays.asList(ConnectionSpec.MODERN_TLS))
 				.addInterceptor(httpLoggingInterceptor)
 				.addInterceptor(chain -> {
 					Request.Builder builder = chain.request().newBuilder()
