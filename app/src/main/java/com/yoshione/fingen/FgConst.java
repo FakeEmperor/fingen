@@ -48,6 +48,7 @@ public class FgConst {
     public static final String PREF_EXPAND_LISTS = "expand_lists";
     public static final String PREF_LAST_BUDGET_CURRENCY = "last_budget_currency";
     public static final String PREF_ACCOUNT_CLICK_ACTION = "account_click_action";
+    public static final String PREF_MANAGED_LOCATION = "managed_location";
     public static final String PREF_SYNC_REMOTE_ACCOUNT = "sync_remote_account";
     public static final String PREF_SHOW_TRANSACTION_TYPE_TITLES = "show_transaction_type_titles";
     public static final String PREF_HIDE_SUMS_PANEL = "hide_sums_panel";

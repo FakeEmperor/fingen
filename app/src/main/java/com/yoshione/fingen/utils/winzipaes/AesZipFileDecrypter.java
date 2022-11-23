@@ -1,5 +1,8 @@
 package com.yoshione.fingen.utils.winzipaes;
 
+import androidx.annotation.NonNull;
+import androidx.documentfile.provider.DocumentFile;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -46,7 +49,7 @@ public class AesZipFileDecrypter implements ZipConstants {
 	public static String charset = "iso-8859-1";
 
 	/** size of buffer to use for byte[] operations - defaults to 1024 */
-	protected static int bufferSize = 1024 * 10;
+	protected static int bufferSize = 1024 * 16;
 
 	// --------------------------------------------------------------------------
 
@@ -64,10 +67,10 @@ public class AesZipFileDecrypter implements ZipConstants {
 	
 	protected String comment;
 	
-	public AesZipFileDecrypter( File zipFile, AESDecrypter decrypter ) throws IOException {
+	public AesZipFileDecrypter(@NonNull File zipFile, AESDecrypter decrypter) throws IOException {
 		this.zipFile = zipFile;
 		this.decrypter = decrypter;
-		this.raFile = new ExtRandomAccessFile( zipFile );
+		this.raFile = new ExtRandomAccessFile(zipFile);
 		initDirOffsetPosAndComment();
 	}
 

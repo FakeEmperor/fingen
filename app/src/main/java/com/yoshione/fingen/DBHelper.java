@@ -1,6 +1,5 @@
 package com.yoshione.fingen;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -9,8 +8,8 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.net.Uri;
 import android.os.SystemClock;
 import android.provider.BaseColumns;
 import android.text.InputType;
@@ -19,9 +18,10 @@ import android.widget.Toast;
 
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
+import androidx.documentfile.provider.DocumentFile;
 import androidx.preference.PreferenceManager;
 
 import com.yoshione.fingen.dao.AccountsDAO;
@@ -58,13 +58,18 @@ import com.yoshione.fingen.utils.Translit;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+
+import javax.annotation.Nullable;
 
 import io.requery.android.database.sqlite.SQLiteDatabase;
 import io.requery.android.database.sqlite.SQLiteOpenHelper;
@@ -77,8 +82,8 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
         return mDatabase;
     }
 
-    private SQLiteDatabase mDatabase;
-    private boolean mOriginDB;
+    private final SQLiteDatabase mDatabase;
+    private final boolean mOriginDB;
     private static final String DATABASE_ORIGIN_NAME = "origin_fingen.db";
     private static final int DATABASE_ORIGIN_VERSION = 35;
     private static final String DATABASE_NAME = "fingen.db";
@@ -90,10 +95,10 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
         return "(SELECT path FROM (with recursive m(path, _id, name) AS (SELECT Name, _id, Name FROM "+tableName+" WHERE ParentId = -1 UNION ALL  SELECT path||'\\'||t.Name, t._id, t.Name FROM "+tableName+" t, m WHERE t.ParentId = m._id) SELECT * FROM m where _id = "+tableName+"._id)) AS FullName";
     }
 
-    private static String[] readQueryFromAssets(String name, Context context) throws IOException {
+    private static String[] readQueryFromAssets(@SuppressWarnings("SameParameterValue") String name, Context context) throws IOException {
         StringBuilder buf = new StringBuilder();
         InputStream inputStream = context.getAssets().open(name);
-        BufferedReader in = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+        BufferedReader in = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
         String str;
 
         while ((str = in.readLine()) != null) {
@@ -227,11 +232,11 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
     @SuppressLint({"DefaultLocale", "CallNeedsPermission"})
     @Override
     public void onUpgrade(final SQLiteDatabase db, int oldVersion, int newVersion) {
-        Lg.log(TAG, "Upgrade database " + String.valueOf(oldVersion) + " -> " + String.valueOf(newVersion));
+        Lg.log(TAG, String.format("Upgrade database %d->%d", oldVersion, newVersion));
 
         //Сделали на всякий случай бэкап
         try {
-            backupDB(false);
+            backupDB(false, FileUtils.getSavedManagedFolder(mContext));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -399,7 +404,7 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
     }
 
     public void updateRunningBalance(SQLiteDatabase database) throws IOException {
-        String sql[] = readQueryFromAssets("sql/update_running_balance.sql", mContext);
+        String[] sql = readQueryFromAssets("sql/update_running_balance.sql", mContext);
         for (String s : sql) {
             if (s != null && !s.isEmpty() && !s.equals("\n")) {
                 android.util.Log.d(TAG, s);
@@ -459,65 +464,70 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
         return mContext.getDatabasePath(mOriginDB ? DATABASE_ORIGIN_NAME : DATABASE_NAME).toString();
     }
 
-    public File backupDB(boolean vacuum) throws IOException {
-        File backup = null;
+    public @Nullable DocumentFile backupDB(boolean vacuum, @NonNull DocumentFile backupFolder) throws IOException {
         if (vacuum) {
             mDatabase.execSQL("VACUUM");
         }
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            String backupPath = FileUtils.getExtFingenBackupFolder();
-            @SuppressLint("SimpleDateFormat") String backupFile = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".zip";
-
-            if (!backupPath.isEmpty()) {
-                SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
-                String password = preferences.getString("backup_password", "");
-                boolean enableProtection = preferences.getBoolean("enable_backup_password", false);
-                if (enableProtection && !password.isEmpty()) {
-                    backup = FileUtils.zipAndEncrypt(getDbPath(), backupPath + backupFile, password, DATABASE_NAME);
-                } else {
-                    backup = FileUtils.zip(getDbPath(), backupPath + backupFile, DATABASE_NAME);
-                }
-                Log.d(TAG, String.format("File %s saved", backupFile));
-            }
+        if (!backupFolder.exists() || !backupFolder.isDirectory()) {
+            throw new IOException("Invalid folder provided: non-existent or not a directory");
         }
-        return backup;
+
+        @SuppressLint("SimpleDateFormat") String backupFileName = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".zip";
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        String password = preferences.getString("backup_password", "");
+        boolean enableProtection = preferences.getBoolean("enable_backup_password", false);
+        DocumentFile backupFile = backupFolder.createFile("application/zip", backupFileName);
+        if (backupFile == null) {
+            throw new IOException("Could not create backup file");
+        }
+        Uri backupFileUri = backupFile.getUri();
+        if (enableProtection && !password.isEmpty()) {
+            FileUtils.zipAndEncrypt(mContext, getDbPath(), backupFileUri, password, DATABASE_NAME);
+        } else {
+            FileUtils.zip(mContext, getDbPath(), backupFileUri, DATABASE_NAME);
+        }
+        Log.d(TAG, String.format("File %s saved", backupFileUri));
+        return backupFile;
     }
 
-    public File backupToOriginDB(boolean vacuum) throws IOException {
-        File backup = null;
+    public @Nullable DocumentFile backupToOriginDB(boolean vacuum, @NonNull DocumentFile backupFolder) throws IOException {
+        DocumentFile backup;
         if (vacuum) {
             mDatabase.execSQL("VACUUM");
         }
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            FileUtils.copyFile(getDbPath(), mContext.getDatabasePath(DATABASE_ORIGIN_NAME).getPath());
+        FileUtils.copyFile(getDbPath(), mContext.getDatabasePath(DATABASE_ORIGIN_NAME).getPath());
 
-            DBHelper dbh = new DBHelper(mContext, true);
-            backup = dbh.backupDB(vacuum);
-            dbh.close();
-            mContext.deleteDatabase(DATABASE_ORIGIN_NAME);
-        }
+        DBHelper dbh = new DBHelper(mContext, true);
+        backup = dbh.backupDB(vacuum, backupFolder);
+        dbh.close();
+        mContext.deleteDatabase(DATABASE_ORIGIN_NAME);
         return backup;
     }
 
-    void showRestoreDialog(final String filename, final AppCompatActivity activity) {
+    public interface RestoreDelegate {
+        void restore(DialogInterface dialogInterface, int which);
+    }
+
+    void showRestoreDialog(@NonNull RestoreDelegate delegate, final AppCompatActivity activity) {
         AlertDialog.Builder builder = new AlertDialog.Builder(activity);
         builder.setTitle(R.string.ttl_confirm_action);
         builder.setMessage(R.string.msg_confirm_restore_db);
 
         // Set up the buttons
-        builder.setPositiveButton("OK", (dialog, which) -> DBHelper.this.restoreDB(filename, activity));
+        // TODO: fixme
+        builder.setPositiveButton("OK", delegate::restore);
         builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
 
         builder.show();
     }
 
-    private class OnOkListener implements DialogInterface.OnClickListener {
-        String mZipFile;
+    private static class OnOkListener implements DialogInterface.OnClickListener {
+        File mZipFile;
         String mLocation;
         EditText mInput;
         IOnUnzipComplete mIOnUnzipComplete;
 
-        public OnOkListener(String zipFile, String location, EditText input, IOnUnzipComplete IOnUnzipComplete) {
+        public OnOkListener(File zipFile, String location, EditText input, IOnUnzipComplete IOnUnzipComplete) {
             mZipFile = zipFile;
             mLocation = location;
             mInput = input;
@@ -530,51 +540,82 @@ public class DBHelper extends SQLiteOpenHelper implements BaseColumns {
         }
     }
 
-    synchronized private void restoreDB(String filename, final AppCompatActivity activity) {
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.READ_EXTERNAL_STORAGE)
-                == PackageManager.PERMISSION_GRANTED) {
-            final File file = new File(filename);
-            final File db = new File(getDbPath());
-            final IOnUnzipComplete completeListener = new IOnUnzipComplete() {
-                @Override
-                public void onComplete() {
-                    if (db.delete()) {
-                        File restored = new File(db.getParent() + "/fingen.db.ex");
-                        restored.renameTo(db);
-                    }
-                    Intent mStartActivity = new Intent(mContext, ActivityMain.class);
-                    int mPendingIntentId = 123456;
-                    PendingIntent mPendingIntent = PendingIntent.getActivity(mContext, mPendingIntentId, mStartActivity, PendingIntent.FLAG_CANCEL_CURRENT);
-                    AlarmManager mgr = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
-                    mgr.set(AlarmManager.RTC, System.currentTimeMillis() + 100, mPendingIntent);
-                    System.exit(0);
-                }
-
-                @Override
-                public void onError() {
-                    Toast.makeText(activity, "Error on restore DB", Toast.LENGTH_SHORT).show();
-                }
-
-                @Override
-                public void onWrongPassword() {
-                    AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-                    builder.setTitle(activity.getString(R.string.ttl_enter_password));
-                    final EditText input = (EditText) activity.getLayoutInflater().inflate(R.layout.template_edittext, null);
-                    input.setText("");
-                    input.setInputType(InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                    builder.setView(input);
-
-                    builder.setPositiveButton("OK", new OnOkListener(file.toString(), db.getParent() + "/", input, this));
-
-                    builder.show();
-                    input.requestFocus();
-                }
-            };
-            if (file.exists()) {
-                final String password = PreferenceManager.getDefaultSharedPreferences(mContext).getString("backup_password", "");
-                FileUtils.unzipAndDecrypt(file.toString(), db.getParent() + "/", password, completeListener);
-            }
+    synchronized public void restoreDBFromUri(@NonNull Uri fileUri, final AppCompatActivity activity) {
+        final DocumentFile backupFile = DocumentFile.fromSingleUri(mContext, fileUri);
+        if (backupFile == null || !backupFile.exists()) {
+            Toast.makeText(mContext, "Error on restore DB: cannot open the file", Toast.LENGTH_SHORT).show();
+            return;
         }
+        // try to copy it
+        File cacheDir = activity.getCacheDir();
+        File cacheFile;
+        try {
+            cacheFile = new File(cacheDir.getCanonicalPath() + "/" + backupFile.getName());
+            if (!cacheFile.createNewFile()) {
+                throw new FileAlreadyExistsException("Failed to create backup file");
+            }
+            FileOutputStream outStream = new FileOutputStream(cacheFile);
+            InputStream inStream = mContext.getContentResolver().openInputStream(fileUri);
+            FileUtils.copyFileUsingStreams(inStream, outStream);
+
+        } catch (IOException e) {
+            Toast.makeText(mContext, "Error on restore DB", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        restoreDBFromFile(cacheFile, activity);
+    }
+
+    synchronized public void restoreDBFromFile(@NonNull File backupFile, final AppCompatActivity activity) {
+        final File db = new File(getDbPath());
+
+        if (!backupFile.exists()) {
+            Toast.makeText(mContext, "Error on restore DB: cannot open the file", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final IOnUnzipComplete completeListener = new IOnUnzipComplete() {
+            @Override
+            public void onComplete(@NonNull File zipFile) {
+                //noinspection ResultOfMethodCallIgnored
+                zipFile.delete();
+                if (db.delete()) {
+                    File restored = new File(db.getParent() + "/fingen.db.ex");
+                    if (!restored.renameTo(db)) {
+                        Toast.makeText(mContext, "Error on restore DB: cannot replace old database", Toast.LENGTH_SHORT).show();
+                    }
+                }
+                Intent mStartActivity = new Intent(mContext, ActivityMain.class);
+                int mPendingIntentId = 123456;
+                PendingIntent mPendingIntent = PendingIntent.getActivity(mContext, mPendingIntentId, mStartActivity, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                AlarmManager mgr = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
+                mgr.set(AlarmManager.RTC, System.currentTimeMillis() + 100, mPendingIntent);
+                System.exit(0);
+            }
+
+            @Override
+            public void onError(@NonNull File zipFile) {
+                //noinspection ResultOfMethodCallIgnored
+                zipFile.delete();
+                Toast.makeText(activity, "Error on restore DB", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onWrongPassword(@NonNull File zipFile) {
+                AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+                builder.setTitle(activity.getString(R.string.ttl_enter_password));
+                final EditText input = (EditText) activity.getLayoutInflater().inflate(R.layout.template_edittext, null);
+                input.setText("");
+                input.setInputType(InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                builder.setView(input);
+
+                builder.setPositiveButton("OK", new OnOkListener(zipFile, db.getParent() + "/", input, this));
+
+                builder.show();
+                input.requestFocus();
+            }
+        };
+        final String password = PreferenceManager.getDefaultSharedPreferences(mContext).getString("backup_password", "");
+        FileUtils.unzipAndDecrypt(backupFile, db.getParent() + "/", password, completeListener);
     }
 
     synchronized void clearDB() {

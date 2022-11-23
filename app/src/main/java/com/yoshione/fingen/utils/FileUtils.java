@@ -2,17 +2,21 @@ package com.yoshione.fingen.utils;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.Context;
+import android.content.Context;;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.os.Environment;
+import android.net.Uri;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
+import androidx.documentfile.provider.DocumentFile;
+import androidx.preference.PreferenceManager;
 
-import com.github.angads25.filepicker.controller.DialogSelectionListener;
 import com.github.angads25.filepicker.model.DialogConfigs;
 import com.github.angads25.filepicker.model.DialogProperties;
 import com.github.angads25.filepicker.view.FilePickerDialog;
+import com.yoshione.fingen.FgConst;
 import com.yoshione.fingen.R;
 import com.yoshione.fingen.interfaces.IOnUnzipComplete;
 import com.yoshione.fingen.utils.winzipaes.AesZipFileDecrypter;
@@ -27,8 +31,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -41,57 +45,17 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Created by Leonid on 06.02.2016.
- *
  */
 @SuppressWarnings("TryFinallyCanBeTryWithResources")
 public class FileUtils {
     private static final String TAG = "FileUtils";
     private static final int BUFFER_SIZE = 1024;
-    private static final String FG_Ext_Storage_Folder = "Fingen";
-    private static final String FG_Backup_Folder = "Backup";
 
-    private static boolean isExtStorageEnabled() {
-        return Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED);
-    }
-
-    private static boolean checkFolder(String pathToFolder) throws IOException {
-        if (isExtStorageEnabled()) {
-            Files.createDirectory(new File(pathToFolder).toPath());
-            return true;
-        }
-        return true;
-    }
-
-    private static String getExtFingenFolder() throws IOException {
-        String path = Environment.getExternalStorageDirectory().toString() + "/" + FG_Ext_Storage_Folder + "/";
-
-        if (checkFolder(path)) {
-            return path;
-        } else {
-            return "";
-        }
-    }
-
-    public static String getExtFingenBackupFolder() throws IOException {
-        String path = getExtFingenFolder();
-        if (!path.isEmpty()) {
-            path = path + FG_Backup_Folder + "/";
-            if (checkFolder(path)) {
-                return path;
-            } else {
-                return "";
-            }
-        } else {
-            return "";
-        }
-    }
-
-    public static File zip(String file, String zipFile, String fileRenaming) throws IOException {
+    public static void zip(Context context, String file, Uri zipFile, String fileRenaming) throws IOException {
         BufferedInputStream origin;
-        ZipOutputStream out = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(zipFile)));
-        File outFile = null;
+        ZipOutputStream out = new ZipOutputStream(new BufferedOutputStream(context.getContentResolver().openOutputStream(zipFile)));
         try {
-            byte data[] = new byte[BUFFER_SIZE];
+            byte[] data = new byte[BUFFER_SIZE];
 
             FileInputStream fi = new FileInputStream(file);
             origin = new BufferedInputStream(fi, BUFFER_SIZE);
@@ -104,17 +68,14 @@ public class FileUtils {
                 }
             } finally {
                 origin.close();
-                outFile = new File(zipFile);
             }
-        }
-        finally {
+        } finally {
             out.close();
         }
-        return outFile;
     }
 
-    public static File zipAndEncrypt(String inFile, String zipFile, String password, String fileRenaming) throws IOException {
-        AesZipFileEncrypter enc = new AesZipFileEncrypter(zipFile, new AESEncrypterBC());
+    public static void zipAndEncrypt(Context context, String inFile, Uri zipFile, String password, String fileRenaming) throws IOException {
+        AesZipFileEncrypter enc = new AesZipFileEncrypter(context.getContentResolver().openOutputStream(zipFile), new AESEncrypterBC());
         File file = new File(inFile);
         FileInputStream fis = new FileInputStream(file);
         try {
@@ -123,10 +84,9 @@ public class FileUtils {
             fis.close();
             enc.close();
         }
-        return new File(zipFile);
     }
 
-    public static void unzip(String zipFile, String outputFile) throws IOException {
+    public static void unzip(@NonNull File zipFile, String outputFile) {
         try {
             ZipInputStream zin = new ZipInputStream(new FileInputStream(zipFile));
             try {
@@ -135,11 +95,10 @@ public class FileUtils {
 
                     if (ze.isDirectory()) {
                         File unzipFile = new File(outputFile);
-                        if(!unzipFile.isDirectory()) {
+                        if (!unzipFile.isDirectory()) {
                             unzipFile.mkdirs();
                         }
-                    }
-                    else {
+                    } else {
                         FileOutputStream fout = new FileOutputStream(outputFile, false);
                         BufferedOutputStream bufout = new BufferedOutputStream(fout);
                         try {
@@ -149,27 +108,66 @@ public class FileUtils {
                             while ((read = zin.read(buffer)) != -1) {
                                 bufout.write(buffer, 0, read);
                             }
-                        }
-                        finally {
+                        } finally {
                             zin.closeEntry();
                             bufout.close();
                             fout.close();
                         }
                     }
                 }
-            }
-            finally {
+            } finally {
                 zin.close();
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             Log.e(TAG, "Unzip exception", e);
         }
     }
 
-    public static void unzipAndDecrypt(String zipFile, String location, String password, IOnUnzipComplete onCompleteListener) {
+    public static DocumentFile getSavedManagedFolder(Context context) throws IOException {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        String locationString = prefs.getString(FgConst.PREF_MANAGED_LOCATION, "");
+        if (locationString.isEmpty()) {
+            throw new IOException("No saved location in shared preferences");
+        }
+        // try parsing it
+        Uri location = Uri.parse(locationString).buildUpon().build();
+        DocumentFile file = DocumentFile.fromTreeUri(context, location);
+        if (file != null && file.exists()) {
+            return file;
+        }
+        throw new IOException("Cannot find file by location");
+    }
+
+    // Copy file held by inputStream to outputStream.
+    public static boolean copyFileUsingStreams(InputStream inputStream, OutputStream outputStream) throws IOException {
+        boolean bSuccess = true;
+
         try {
-            AesZipFileDecrypter decrypter = new AesZipFileDecrypter(new File(zipFile), new AESDecrypterBC());
+            byte[] buffer = new byte[1024 * 16];
+            int length;
+
+            while ((length = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, length);
+            }
+        } catch (Exception e) {
+            bSuccess = false;
+        } finally {
+            try {
+                if (inputStream != null) {
+                    inputStream.close();
+                }
+            } finally {
+                if (outputStream != null) {
+                    outputStream.close();
+                }
+            }
+        }
+        return bSuccess;
+    }
+
+    public static void unzipAndDecrypt(@NonNull File zipFile, String location, String password, IOnUnzipComplete onCompleteListener) {
+        try {
+            AesZipFileDecrypter decrypter = new AesZipFileDecrypter(zipFile, new AESDecrypterBC());
             ExtZipEntry entry = decrypter.getEntry("fingen.db");
             if (entry.isEncrypted()) {
                 decrypter.extractEntry(entry, new File(location + "/fingen.db.ex"), password);
@@ -178,28 +176,27 @@ public class FileUtils {
             }
         } catch (ZipException ze) {
             Log.e(TAG, "Wrong password", ze);
-            onCompleteListener.onWrongPassword();
+            onCompleteListener.onWrongPassword(zipFile);
             return;
         } catch (Exception e) {
             Log.e(TAG, "Unzip exception", e);
-            onCompleteListener.onError();
+            onCompleteListener.onError(zipFile);
             return;
         }
-        onCompleteListener.onComplete();
+        onCompleteListener.onComplete(zipFile);
     }
 
-    public static List<File> getListFiles(Context context, File parentDir, String ext) {
-        ArrayList<File> inFiles = new ArrayList<>();
+    public static List<DocumentFile> getListFiles(@NonNull DocumentFile parentDir, String ext) {
+        ArrayList<DocumentFile> inFiles = new ArrayList<>();
 
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            File[] files = parentDir.listFiles();
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    inFiles.addAll(getListFiles(context, file, ext));
-                } else {
-                    if (file.getName().endsWith(ext)) {
-                        inFiles.add(file);
-                    }
+        DocumentFile[] files = parentDir.listFiles();
+        for (DocumentFile file : files) {
+            if (file.isDirectory()) {
+                inFiles.addAll(getListFiles(file, ext));
+            } else {
+                String filename = file.getName();
+                if (filename != null && filename.endsWith(ext)) {
+                    inFiles.add(file);
                 }
             }
         }
@@ -219,27 +216,24 @@ public class FileUtils {
     }
 
     public static void SelectFileFromStorage(Activity activity, int selectionType, final IOnSelectFile onSelectFileListener) {
-        final DialogProperties properties=new DialogProperties();
+        final DialogProperties properties = new DialogProperties();
         properties.selection_mode = DialogConfigs.SINGLE_MODE;
         properties.selection_type = selectionType;
         properties.root = new File(DialogConfigs.DEFAULT_DIR);
         properties.error_dir = new File(DialogConfigs.DEFAULT_DIR);
         properties.offset = new File(DialogConfigs.DEFAULT_DIR);
-        properties.extensions = new String[] {"csv", "CSV"};
+        properties.extensions = new String[]{"csv", "CSV"};
 
-        FilePickerDialog dialog=new FilePickerDialog(activity,properties);
+        FilePickerDialog dialog = new FilePickerDialog(activity, properties);
         String title = "";
         title = selectionType == DialogConfigs.FILE_SELECT ? activity.getString(R.string.ttl_select_csv_file) : activity.getString(R.string.ttl_select_export_dir);
         dialog.setTitle(title);
         dialog.setPositiveBtnName("Select");
         dialog.setNegativeBtnName("Cancel");
 
-        dialog.setDialogSelectionListener(new DialogSelectionListener() {
-            @Override
-            public void onSelectedFilePaths(String[] files) {
-                if (files.length == 1 && !files[0].isEmpty()) {
-                    onSelectFileListener.OnSelectFile(files[0]);
-                }
+        dialog.setDialogSelectionListener(files -> {
+            if (files.length == 1 && !files[0].isEmpty()) {
+                onSelectFileListener.OnSelectFile(files[0]);
             }
         });
 

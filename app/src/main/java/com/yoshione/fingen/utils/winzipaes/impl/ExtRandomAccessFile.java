@@ -5,6 +5,8 @@ import static com.yoshione.fingen.utils.winzipaes.impl.ByteArrayHelper.toLong;
 import static com.yoshione.fingen.utils.winzipaes.impl.ByteArrayHelper.toShort;
 
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Arrays;
@@ -43,8 +45,7 @@ public class ExtRandomAccessFile {
 	public long readLong() throws IOException {
 		byte[] b = new byte[8];
 		file.read(b, 0, 8);
-		long out = toLong(b);
-		return out;
+		return toLong(b);
 	}
 
 	public long readLong(long pos) throws IOException {
@@ -55,8 +56,7 @@ public class ExtRandomAccessFile {
 	public int readInt() throws IOException {
 		byte[] b = new byte[4];
 		file.read(b, 0, 4);
-		int out = toInt(b);
-		return out;
+		return toInt(b);
 	}
 
 	public int readInt(long pos) throws IOException {
@@ -67,8 +67,7 @@ public class ExtRandomAccessFile {
 	public short readShort() throws IOException {
 		byte[] b = new byte[2];
 		file.read(b, 0, 2);
-		short out = toShort(b);
-		return out;
+		return toShort(b);
 	}
 
 	public short readShort(long pos) throws IOException {
